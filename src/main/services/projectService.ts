@@ -91,10 +91,22 @@ export const analyzeProject = (projectPath: string): ProjectReport => {
     if (fs.existsSync(reqPath)) content += fs.readFileSync(reqPath, 'utf8')
     if (fs.existsSync(pyProjPath)) content += fs.readFileSync(pyProjPath, 'utf8')
 
-    if (content.includes('psycopg2') || content.includes('sqlalchemy')) {
+    if (content.includes('psycopg2')) {
       report.database = 'Postgres'
       if (!report.services.includes('postgres')) report.services.push('postgres')
+    } else if (content.includes('pymysql') || content.includes('mysql-connector')) {
+      report.database = 'MySQL'
+      if (!report.services.includes('mysql')) report.services.push('mysql')
+    } else if (content.includes('sqlalchemy')) {
+      if (content.includes('postgres')) {
+        report.database = 'Postgres'
+        if (!report.services.includes('postgres')) report.services.push('postgres')
+      } else {
+        report.database = 'MySQL'
+        if (!report.services.includes('mysql')) report.services.push('mysql')
+      }
     }
+
     if (content.includes('pymongo') || content.includes('mongoengine')) {
       report.database = 'MongoDB'
       if (!report.services.includes('mongodb')) report.services.push('mongodb')
@@ -103,8 +115,22 @@ export const analyzeProject = (projectPath: string): ProjectReport => {
       report.cache = 'Redis'
       if (!report.services.includes('redis')) report.services.push('redis')
     }
-    report.startCommand = 'python app.py'
-    report.port = 5000
+
+    const possibleEntries = ['main.py', 'app.py', 'run.py', 'index.py']
+    const entry = possibleEntries.find(e => fs.existsSync(path.join(projectPath, e))) || 'app.py'
+    
+    if (content.includes('fastapi')) {
+      report.framework = 'FastAPI'
+      report.startCommand = `uvicorn ${entry.replace('.py', '')}:app --host 0.0.0.0 --port 8000`
+      report.port = 8000
+    } else if (content.includes('flask')) {
+      report.framework = 'Flask'
+      report.startCommand = `python ${entry}`
+      report.port = 5000
+    } else {
+      report.startCommand = `python ${entry}`
+      report.port = 5000
+    }
   }
 
   // Java detection
@@ -148,6 +174,7 @@ export const generateConfig = (projectPath: string, report: ProjectReport) => {
       DB_HOST: report.services.includes('mysql') ? 'mysql' : (report.services.includes('postgres') ? 'postgres' : ''),
       DB_USER: 'devuser',
       DB_PASSWORD: 'devpassword',
+      DB_PASS: 'devpassword',
       DB_NAME: report.services.includes('mysql') ? 'todos_db' : 'devdb',
       REDIS_URL: report.services.includes('redis') ? 'redis://redis:6379' : '',
       MONGODB_URI: report.services.includes('mongodb') ? 'mongodb://mongodb:27017/devdb' : ''
@@ -158,87 +185,87 @@ export const generateConfig = (projectPath: string, report: ProjectReport) => {
   const envPath = path.join(projectPath, '.env')
   let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8').trim() : ''
   Object.entries(config.env).forEach(([key, value]) => {
-    if (value && !envContent.includes(`${key}=`)) {
-      envContent += (envContent ? '\n' : '') + `${key}=${value}`
+    const regex = new RegExp(`^${key}=.*`, 'm');
+    if (envContent.match(regex)) {
+      if (key === 'DB_HOST' || key === 'DB_PASS' || key === 'DB_USER' || key === 'DB_NAME' || key === 'DB_PASSWORD') {
+        envContent = envContent.replace(regex, `${key}=${value}`);
+      }
+    } else {
+      envContent += (envContent ? '\n' : '') + `${key}=${value}`;
     }
-  })
+  });
   if (envContent) fs.writeFileSync(envPath, envContent + '\n')
+
+  // Generate Python Shim
+  if (report.framework === 'Python' || report.framework === 'FastAPI' || report.framework === 'Flask') {
+    const pythonShim = `
+import socket
+import os
+
+_original_getaddrinfo = socket.getaddrinfo
+
+def patched_getaddrinfo(host, port, *args, **kwargs):
+    if host in ['localhost', '127.0.0.1', 'db', 'database']:
+        if port == 3306: host = 'mysql'
+        elif port == 5432: host = 'postgres'
+        elif port == 27017: host = 'mongodb'
+        elif port == 6379: host = 'redis'
+    return _original_getaddrinfo(host, port, *args, **kwargs)
+
+socket.getaddrinfo = patched_getaddrinfo
+`;
+    fs.writeFileSync(path.join(devupDir, 'shim.py'), pythonShim);
+  }
+
+  if (report.framework === 'Node.js') {
+    const shim = `
+const Module = require('module');
+const originalRequire = Module.prototype.require;
+const patchConfig = (config) => {
+  if (typeof config !== 'object' || config === null) return config;
+  if (config.host === 'localhost' || config.host === '127.0.0.1' || !config.host) config.host = 'mysql';
+  if (config.user === 'root') { config.user = 'devuser'; config.password = 'devpassword'; }
+  return config;
+};
+Module.prototype.require = function(id) {
+  const exports = originalRequire.apply(this, arguments);
+  if (id === 'mysql' || id === 'mysql2') {
+    const originalCreateConnection = exports.createConnection;
+    if (typeof originalCreateConnection === 'function') exports.createConnection = function(config) { return originalCreateConnection.call(this, patchConfig(config)); };
+    const originalCreatePool = exports.createPool;
+    if (typeof originalCreatePool === 'function') exports.createPool = function(config) { return originalCreatePool.call(this, patchConfig(config)); };
+  }
+  return exports;
+};
+`;
+    fs.writeFileSync(path.join(devupDir, 'shim.js'), shim);
+  }
 
   const dockerfilePath = path.join(devupDir, 'Dockerfile')
   let dockerfileContent = ''
 
-        if (report.framework === 'Node.js') {
-          const shim = `
-      const Module = require('module');
-      const originalRequire = Module.prototype.require;
-      
-      const patchConfig = (config) => {
-        if (typeof config !== 'object' || config === null) return config;
-        if (config.host === 'localhost' || config.host === '127.0.0.1' || !config.host) {
-          config.host = 'mysql';
-        }
-        if (config.user === 'root') {
-          config.user = 'devuser';
-          config.password = 'devpassword';
-        }
-        return config;
-      };
-      
-      Module.prototype.require = function(id) {
-        const exports = originalRequire.apply(this, arguments);
-        if (id === 'mysql' || id === 'mysql2') {
-          const originalCreateConnection = exports.createConnection;
-          if (typeof originalCreateConnection === 'function') {
-            exports.createConnection = function(config) {
-              return originalCreateConnection.call(this, patchConfig(config));
-            };
-          }
-          const originalCreatePool = exports.createPool;
-          if (typeof originalCreatePool === 'function') {
-            exports.createPool = function(config) {
-              return originalCreatePool.call(this, patchConfig(config));
-            };
-          }
-        }
-        return exports;
-      };
-      
-      // Also keep net interceptor as a fallback
-      const net = require('net');
-      const _connect = net.connect;
-      net.connect = function() {
-        let args = Array.from(arguments);
-        if (args[0] && typeof args[0] === 'object') {
-          if (args[0].host === 'localhost' || args[0].host === '127.0.0.1') args[0].host = 'mysql';
-        }
-        return _connect.apply(this, args);
-      };
-      `;
-          fs.writeFileSync(path.join(devupDir, 'shim.js'), shim);
-      
-          const startCmd = report.startCommand.replace('npm start', 'server.js').replace('node ', '');
-          
-          dockerfileContent = `FROM node:${report.nodeVersion}-alpine
-      WORKDIR /app
-      COPY package*.json ./
-      RUN npm install
-      COPY . .
-      COPY .devup/shim.js /shim.js
-      EXPOSE ${report.port}
-      ENV NODE_OPTIONS="-r /shim.js"
-      CMD ["node", "${startCmd}"]
-      `
-        }
-      
-    
-   else if (report.framework === 'Python') {
+  if (report.framework === 'Node.js') {
+    const startCmd = report.startCommand.replace('npm start', 'server.js').replace('node ', '');
+    dockerfileContent = `FROM node:${report.nodeVersion}-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+COPY .devup/shim.js /shim.js
+EXPOSE ${report.port}
+ENV NODE_OPTIONS="-r /shim.js"
+CMD ["node", "${startCmd}"]
+`
+  } else if (report.framework === 'Python' || report.framework === 'FastAPI' || report.framework === 'Flask') {
     dockerfileContent = `FROM python:3.9-slim
 WORKDIR /app
 COPY requirements.txt* .
 RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
 COPY . .
+COPY .devup/shim.py /app/sitecustomize.py
 EXPOSE ${report.port}
-CMD ["python", "app.py"]
+ENV PYTHONPATH=/app:$PYTHONPATH
+CMD ${JSON.stringify(report.startCommand.split(' '))}
 `
   } else if (report.framework === 'Java') {
     dockerfileContent = `FROM maven:3.8-openjdk-17-slim
@@ -252,8 +279,11 @@ CMD ["mvn", "spring-boot:run"]
   }
   if (dockerfileContent) fs.writeFileSync(dockerfilePath, dockerfileContent)
 
-  // Generate .dockerignore to prevent local node_modules and git from being copied
   fs.writeFileSync(path.join(projectPath, '.dockerignore'), 'node_modules\n.git\n')
+
+  const sqlFiles = fs.readdirSync(projectPath)
+    .filter(file => file.endsWith('.sql') || file.toLowerCase() === 'schema.sql')
+    .map(file => `      - ../${file}:/docker-entrypoint-initdb.d/${file}`)
 
   const composePath = path.join(devupDir, 'docker-compose.yml')
   let composeContent = `version: "3.8"
@@ -284,6 +314,13 @@ ${report.services.map(s => `      ${s}:
       POSTGRES_DB: devdb
     ports:
       - "5432:5432"
+    networks:
+      default:
+        aliases:
+          - db
+          - database
+    volumes:
+${sqlFiles.length > 0 ? sqlFiles.join('\n') : '      - ./.devup:/tmp/devup_empty:ro'}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U devuser -d devdb"]
       interval: 5s
@@ -332,6 +369,13 @@ ${report.services.map(s => `      ${s}:
       MYSQL_PASSWORD: devpassword
     ports:
       - "3306:3306"
+    networks:
+      default:
+        aliases:
+          - db
+          - database
+    volumes:
+${sqlFiles.length > 0 ? sqlFiles.join('\n') : '      - ./.devup:/tmp/devup_empty:ro'}
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "devuser", "-pdevpassword"]
       interval: 5s
