@@ -7,6 +7,7 @@ interface ProjectReport {
   cache: string
   services: string[]
   configFound: boolean
+  port: number
 }
 
 const App = () => {
@@ -16,6 +17,7 @@ const App = () => {
   const [loading, setLoading] = useState(false)
   const [health, setHealth] = useState<Record<string, boolean>>({})
   const [setupStep, setSetupStep] = useState(0) // 0: Select, 1: Analyze, 2: Setup/Start
+  const [repoUrl, setRepoUrl] = useState('')
   const logEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -29,15 +31,30 @@ const App = () => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
 
-  const handleSelectFolder = async () => {
+  const handleClone = async () => {
+    if (!repoUrl) return
     const path = await window.electronAPI.selectFolder()
     if (path) {
-      setProjectPath(path)
       setLoading(true)
-      const analysisReport = await window.electronAPI.analyzeProject(path)
-      setReport(analysisReport)
+      setLogs(['Starting repository clone...', `URL: ${repoUrl}`, `Location: ${path}`])
+      const cloneResult = await window.electronAPI.cloneRepo(repoUrl, path)
+      
+      if (cloneResult.success) {
+        setLogs((prev) => [...prev, 'Clone successful. Starting analysis...'])
+        setProjectPath(path)
+        const analysisReport = await window.electronAPI.analyzeProject(path)
+        setReport(analysisReport)
+        setSetupStep(1)
+      } else {
+        setLogs((prev) => [...prev, `CLONE ERROR: ${cloneResult.error}`])
+      }
       setLoading(false)
-      setSetupStep(1)
+    }
+  }
+
+  const handleOpenEditor = async () => {
+    if (projectPath) {
+      await window.electronAPI.openEditor(projectPath)
     }
   }
 
@@ -78,6 +95,7 @@ const App = () => {
     setLogs([])
     setSetupStep(0)
     setHealth({})
+    setRepoUrl('')
   }
 
   return (
@@ -96,14 +114,23 @@ const App = () => {
         {setupStep === 0 && (
           <div style={styles.hero}>
             <h2 style={styles.heroTitle}>Streamline your development environment.</h2>
-            <p style={styles.heroSub}>Select your project folder to auto-detect dependencies and spin up infrastructure.</p>
-            <button 
-              onClick={handleSelectFolder} 
-              disabled={loading}
-              style={{...styles.primaryBtn, padding: '15px 40px', fontSize: '18px'}}
-            >
-              {loading ? 'Analyzing...' : 'Select Project Folder'}
-            </button>
+            <p style={styles.heroSub}>Paste your Git repo URL and choose a location to auto-detect dependencies and spin up infrastructure.</p>
+            <div style={styles.inputGroup}>
+              <input 
+                type="text" 
+                placeholder="https://github.com/user/repo.git" 
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+                style={styles.textInput}
+              />
+              <button 
+                onClick={handleClone} 
+                disabled={loading || !repoUrl}
+                style={{...styles.primaryBtn, padding: '15px 40px', fontSize: '18px'}}
+              >
+                {loading ? 'Processing...' : 'Clone & Setup'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -111,7 +138,10 @@ const App = () => {
           <div style={styles.dashboard}>
             <div style={styles.column}>
               <section style={styles.card}>
-                <h3 style={styles.cardTitle}>Project Blueprint</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{...styles.cardTitle, margin: 0}}>Project Blueprint</h3>
+                  <button onClick={handleOpenEditor} style={styles.editorBtn}>Open in Code Editor</button>
+                </div>
                 <div style={styles.infoGrid}>
                   <div style={styles.infoItem}>
                     <span style={styles.infoLabel}>Path</span>
@@ -269,6 +299,33 @@ const styles: Record<string, any> = {
     fontWeight: 600,
     cursor: 'pointer',
     transition: 'background-color 0.2s',
+  },
+  inputGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    width: '100%',
+    maxWidth: '500px',
+  },
+  textInput: {
+    padding: '12px 16px',
+    backgroundColor: '#1e293b',
+    border: '1px solid #334155',
+    borderRadius: '8px',
+    color: '#f8fafc',
+    fontSize: '14px',
+    width: '100%',
+    outline: 'none',
+  },
+  editorBtn: {
+    padding: '6px 12px',
+    backgroundColor: '#475569',
+    color: '#f1f5f9',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: 500,
   },
   dashboard: {
     display: 'grid',

@@ -184,10 +184,18 @@ export const generateConfig = (projectPath: string, report: ProjectReport) => {
 
   const envPath = path.join(projectPath, '.env')
   let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8').trim() : ''
-  Object.entries(config.env).forEach(([key, value]) => {
+  
+  // DEV MODE: Add development-specific env vars
+  const devEnvVars = {
+    NODE_ENV: 'development',
+    CHOKIDAR_USEPOLLING: 'true', // Essential for hot-reload in Docker volumes
+    ...config.env
+  }
+
+  Object.entries(devEnvVars).forEach(([key, value]) => {
     const regex = new RegExp(`^${key}=.*`, 'm');
     if (envContent.match(regex)) {
-      if (key === 'DB_HOST' || key === 'DB_PASS' || key === 'DB_USER' || key === 'DB_NAME' || key === 'DB_PASSWORD') {
+      if (['DB_HOST', 'DB_PASS', 'DB_USER', 'DB_NAME', 'DB_PASSWORD', 'NODE_ENV', 'CHOKIDAR_USEPOLLING'].includes(key)) {
         envContent = envContent.replace(regex, `${key}=${value}`);
       }
     } else {
@@ -286,6 +294,20 @@ CMD ["mvn", "spring-boot:run"]
     .map(file => `      - ../${file}:/docker-entrypoint-initdb.d/${file}`)
 
   const composePath = path.join(devupDir, 'docker-compose.yml')
+  
+  // DEV MODE: Determine dev command for Node.js
+  let appCommand = ''
+  if (report.framework === 'Node.js') {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'))
+      if (pkg.scripts?.dev) {
+        appCommand = 'npm run dev'
+      } else if (pkg.scripts?.start) {
+        appCommand = 'npm start'
+      }
+    } catch (e) {}
+  }
+
   let composeContent = `version: "3.8"
 services:
   app:
@@ -299,6 +321,7 @@ services:
       - /app/node_modules
     env_file:
       - ../.env
+    ${appCommand ? `command: ${appCommand}` : ''}
     depends_on:
 ${report.services.map(s => `      ${s}:
         condition: service_healthy`).join('\n')}
@@ -393,6 +416,14 @@ export const runDockerCompose = (projectPath: string) => {
   const args = [...dockerCmd.slice(1), 'up', '-d', '--build']
   const child = spawn(dockerCmd[0], args, {
     cwd: devupDir,
+    shell: true
+  })
+  return child
+}
+
+export const cloneRepo = (repoUrl: string, clonePath: string) => {
+  const child = spawn('git', ['clone', repoUrl, '.'], {
+    cwd: clonePath,
     shell: true
   })
   return child

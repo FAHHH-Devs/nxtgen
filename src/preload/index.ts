@@ -7,7 +7,9 @@ const customAPI = {
   analyzeProject: (path: string) => ipcRenderer.invoke('project:analyze', path),
   generateConfig: (path: string, report: any) => ipcRenderer.invoke('project:generateConfig', path, report),
   runDocker: (path: string) => ipcRenderer.invoke('project:runDocker', path),
-  checkHealth: (services: string[]) => ipcRenderer.invoke('project:checkHealth', services),
+  checkHealth: (services: string[], port: number) => ipcRenderer.invoke('project:checkHealth', services, port),
+  cloneRepo: (repoUrl: string, clonePath: string) => ipcRenderer.invoke('project:clone', repoUrl, clonePath),
+  openEditor: (path: string) => ipcRenderer.invoke('project:openEditor', path),
   onDockerLog: (callback: (log: string) => void) => {
     const subscription = (_event: any, log: string) => callback(log)
     ipcRenderer.on('docker:log', subscription)

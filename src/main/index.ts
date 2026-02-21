@@ -2,7 +2,8 @@ import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { analyzeProject, generateConfig, runDockerCompose, checkHealth } from './services/projectService'
+import { analyzeProject, generateConfig, runDockerCompose, checkHealth, cloneRepo } from './services/projectService'
+import { spawn } from 'child_process'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -74,6 +75,44 @@ ipcMain.handle('project:runDocker', async (event, projectPath) => {
 
 ipcMain.handle('project:checkHealth', async (_, services, port) => {
   return await checkHealth(services, port)
+})
+
+ipcMain.handle('project:clone', async (event, repoUrl, clonePath) => {
+  try {
+    const child = cloneRepo(repoUrl, clonePath)
+    
+    child.stdout?.on('data', (data) => {
+      event.sender.send('docker:log', data.toString())
+    })
+    
+    child.stderr?.on('data', (data) => {
+      event.sender.send('docker:log', data.toString())
+    })
+
+    return new Promise((resolve) => {
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true })
+        } else {
+          resolve({ success: false, error: `Git clone failed with code ${code}` })
+        }
+      })
+      child.on('error', (err) => {
+        resolve({ success: false, error: err.message })
+      })
+    })
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  }
+})
+
+ipcMain.handle('project:openEditor', async (_, projectPath) => {
+  try {
+    spawn('code', [projectPath], { shell: true })
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: (err as Error).message }
+  }
 })
 
 app.whenReady().then(() => {

@@ -6,6 +6,7 @@ export interface ProjectReport {
   cache: string
   services: string[]
   configFound: boolean
+  port: number
 }
 
 export interface ElectronAPI_Custom {
@@ -14,7 +15,9 @@ export interface ElectronAPI_Custom {
   generateConfig: (path: string, report: ProjectReport) => Promise<{ success: boolean }>
   runDocker: (path: string) => Promise<{ success: boolean; error?: string }>
   checkHealth: (services: string[], port?: number) => Promise<Record<string, boolean>>
-  onDockerLog: (callback: (log: string) => void) => void
+  cloneRepo: (repoUrl: string, clonePath: string) => Promise<{ success: boolean; error?: string }>
+  openEditor: (path: string) => Promise<{ success: boolean; error?: string }>
+  onDockerLog: (callback: (log: string) => void) => () => void
 }
 
 declare global {
