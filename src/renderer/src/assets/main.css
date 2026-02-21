@@ -1,0 +1,21 @@
+@import './base.css';
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100vh;
+}
+
+code {
+  font-weight: 600;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background-color: #334155;
+  font-family: ui-monospace, monospace;
+}
