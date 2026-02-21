@@ -13,7 +13,7 @@ export interface ElectronAPI_Custom {
   analyzeProject: (path: string) => Promise<ProjectReport>
   generateConfig: (path: string, report: ProjectReport) => Promise<{ success: boolean }>
   runDocker: (path: string) => Promise<{ success: boolean; error?: string }>
-  checkHealth: (services: string[]) => Promise<Record<string, boolean>>
+  checkHealth: (services: string[], port?: number) => Promise<Record<string, boolean>>
   onDockerLog: (callback: (log: string) => void) => void
 }
 

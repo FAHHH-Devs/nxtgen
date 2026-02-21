@@ -1,17 +1,34 @@
-import { useState } from 'react'
+interface ProjectReport {
+  framework: string
+  database: string
+  cache: string
+  services: string[]
+  configFound: boolean
+  port?: number
+  startCommand?: string
+  nodeVersion?: string
+}
 
-function Versions(): React.JSX.Element {
-  const [versions] = useState((window as any).electron?.process?.versions || {})
+interface VersionsProps {
+  report: ProjectReport | null
+}
 
-  if (!versions.electron) {
-    return <ul className="versions"><li>Development Mode</li></ul>
+function Versions({ report }: VersionsProps): React.JSX.Element {
+  if (!report) {
+    return (
+      <ul className="versions">
+        <li>Environment: Ready</li>
+        <li>Mode: Development</li>
+      </ul>
+    )
   }
 
   return (
     <ul className="versions">
-      <li className="electron-version">Electron v{versions.electron}</li>
-      <li className="chrome-version">Chromium v{versions.chrome}</li>
-      <li className="node-version">Node v{versions.node}</li>
+      <li>Stack: {report.framework}</li>
+      {report.nodeVersion && <li>Node: v{report.nodeVersion}</li>}
+      <li>DB: {report.database}</li>
+      {report.cache !== 'None detected' && <li>Cache: {report.cache}</li>}
     </ul>
   )
 }

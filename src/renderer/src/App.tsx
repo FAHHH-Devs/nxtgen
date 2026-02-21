@@ -66,8 +66,9 @@ const App = () => {
   }
 
   const performHealthCheck = async () => {
-    if (!report || report.services.length === 0) return
-    const status = await window.electronAPI.checkHealth(report.services)
+    if (!report) return
+    const servicesToCheck = ['app', ...(report.services || [])]
+    const status = await window.electronAPI.checkHealth(servicesToCheck, report.port)
     setHealth(status)
   }
 
@@ -141,18 +142,18 @@ const App = () => {
                 )}
               </section>
 
-              {report && report.services.length > 0 && (
+              {report && (
                 <section style={styles.card}>
                   <h3 style={styles.cardTitle}>Infrastructure Health</h3>
                   <div style={styles.serviceList}>
-                    {report.services.map((service) => (
+                    {['app', ...report.services].map((service) => (
                       <div key={service} style={styles.serviceItem}>
                         <div style={{ 
                           ...styles.statusDot, 
                           backgroundColor: health[service] ? '#4caf50' : '#f44336',
                           boxShadow: health[service] ? '0 0 8px #4caf50' : '0 0 8px #f44336'
                         }} />
-                        <span style={styles.serviceName}>{service}</span>
+                        <span style={styles.serviceName}>{service === 'app' ? 'Project' : service}</span>
                         <span style={styles.statusText}>
                           {health[service] ? 'Online' : 'Starting...'}
                         </span>
@@ -182,7 +183,7 @@ const App = () => {
         )}
       </main>
       <footer style={styles.footer}>
-        <Versions />
+        <Versions report={report} />
       </footer>
     </div>
   )

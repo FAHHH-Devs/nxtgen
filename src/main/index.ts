@@ -72,8 +72,8 @@ ipcMain.handle('project:runDocker', async (event, projectPath) => {
   }
 })
 
-ipcMain.handle('project:checkHealth', async (_, services) => {
-  return await checkHealth(services)
+ipcMain.handle('project:checkHealth', async (_, services, port) => {
+  return await checkHealth(services, port)
 })
 
 app.whenReady().then(() => {
