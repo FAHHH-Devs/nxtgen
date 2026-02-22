@@ -1,5 +1,5 @@
 {
-  "name": "devup-app",
+  "name": "DOC-PILOT-app",
   "version": "1.0.0",
   "description": "An Electron application with React and TypeScript",
   "main": "./out/main/index.js",

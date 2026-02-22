@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: devup-app
+productName: DOC-PILOT
 directories:
   buildResources: build
 files:
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: devup-app
+  executableName: DOC-PILOT-app
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

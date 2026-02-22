@@ -103,7 +103,7 @@ const App = () => {
       <header style={styles.header}>
         <div style={styles.logoContainer}>
           <div style={styles.logo}>D</div>
-          <h1 style={styles.title}>DevUp Accelerator</h1>
+          <h1 style={styles.title}>DOC-PILOT Accelerator</h1>
         </div>
         {projectPath && (
           <button onClick={reset} style={styles.resetBtn}>New Project</button>
