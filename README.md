@@ -1,6 +1,6 @@
-# devup-app
+# DOC-PILOT
 
-`devup-app` is a powerful Electron-based desktop application designed to streamline the setup of local development environments. It automatically analyzes your source code, detects frameworks and database dependencies, and generates a fully-functional Docker Compose infrastructure tailored to your project.
+`DOC-PILOT` is a powerful Electron-based desktop application designed to streamline the setup of local development environments. It automatically analyzes your source code, detects frameworks and database dependencies, and generates a fully-functional Docker Compose infrastructure tailored to your project.
 
 ## 🚀 Features
 
