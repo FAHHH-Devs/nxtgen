@@ -299,9 +299,9 @@ services:
       - /app/node_modules
     env_file:
       - ../.env
-    depends_on:
+${report.services.length > 0 ? `    depends_on:
 ${report.services.map(s => `      ${s}:
-        condition: service_healthy`).join('\n')}
+        condition: service_healthy`).join('\n')}` : ''}
 `
 
   if (report.services.includes('postgres')) {
